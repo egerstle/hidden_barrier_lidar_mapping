@@ -34,6 +34,7 @@ snoho_roads_buffer<-st_buffer(snoho_roads$osm_lines,dist = 15)|>
 
 snoho_roads_buffer<-st_union(snoho_roads_buffer$geometry)
 
+#Clip out the roads buffer to leave us with only the areas outside the roads
 anti_buffer<-st_bbox(snoho_roads_buffer)|>
   st_as_sfc()|>
   st_difference(snoho_roads_buffer)
