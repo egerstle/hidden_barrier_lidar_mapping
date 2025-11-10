@@ -2,10 +2,8 @@ library(tidyverse)
 library(sf)
 library(ggspatial)
 library(here)
-library(terra)
 library(raster)
 library(lidR)
-library(whitebox)
 library(osmdata)
 
 
