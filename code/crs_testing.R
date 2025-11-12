@@ -1,60 +1,60 @@
-# Validate CRS alignment and clipping for LiDAR data ----
-
 library(sf)
+library(mapview)
 library(osmdata)
 library(lidR)
 library(here)
 
-# Load LiDAR catalog ----
-
+# --- 1. Path to LiDAR files ---
 snoho_path <- here("Data", "kingco_sf_snoqualmie_river_2010", "laz")
-snoho_lascat <- readLAScatalog(snoho_path)
 
-opt_chunk_size(snoho_lascat)  <- 4000
-opt_chunk_buffer(snoho_lascat) <- 1
+# List LAS/LAZ files and pick one small file for testing
+las_files <- list.files(snoho_path, pattern = "\\.laz$", full.names = TRUE)
+test_file <- las_files[1]  # choose the first file
 
-# Get LiDAR bounding box and convert to lat/lon for OSM query ----
+# --- 2. Read only one file instead of the catalog ---
+test_las <- readLAS(test_file)
 
-lidar_bbox_m <- st_as_sfc(st_bbox(snoho_lascat), crs = 32149)
+# Assign correct CRS (NAD83 / Washington South (ftUS))
+st_crs(test_las) <- 2927
 
-lidar_bbox_latlon <- st_transform(lidar_bbox_m, 4326) |> st_bbox()
+# --- 3. Make a bounding box for the test file ---
+lidar_bbox <- st_as_sfc(st_bbox(test_las), crs = 2927)
+lidar_bbox_latlon <- st_transform(lidar_bbox, 4326) |> st_bbox()
 
-# Shrink bounding box for faster testing ----
-
-shrink_bbox <- function(bbox, factor = 20) {
-  dx <- (bbox$xmax - bbox$xmin) / factor
-  dy <- (bbox$ymax - bbox$ymin) / factor
-  c(
-    xmin = bbox$xmin + dx,
-    ymin = bbox$ymin + dy,
-    xmax = bbox$xmin + 2 * dx,
-    ymax = bbox$ymin + 2 * dy
-  )
-}
-
-small_bbox <- shrink_bbox(lidar_bbox_latlon)
-
-# Query OSM for a small sample of roads ----
-
-roads_test <- opq(bbox = small_bbox) |>
+# --- 4. Get nearby roads from OpenStreetMap ---
+roads <- opq(bbox = lidar_bbox_latlon) |>
   add_osm_feature(key = "highway") |>
   osmdata_sf()
 
-# Transform and buffer roads ----
-
-roads_buffer <- roads_test$osm_lines |>
-  st_transform(crs = 32149) |>
+roads_buffer <- roads$osm_lines |>
+  st_transform(crs = 2927) |>
   st_buffer(dist = 15) |>
   st_union()
 
-# Create anti-buffer area (inside LiDAR extent but outside roads) ----
-
+# --- 5. Create anti-buffer (inside lidar extent but outside roads) ---
 anti_buffer <- st_difference(
-  st_as_sfc(st_bbox(snoho_lascat), crs = 32149),
+  lidar_bbox,
   roads_buffer
 )
 
-# Clip LiDAR points to anti-road area ----
+# --- 6. Clip LiDAR points just for this small area ---
+lidar_clip <- clip_roi(test_las, anti_buffer)
 
-test_clip <- clip_roi(snoho_lascat, anti_buffer)
-print(test_clip)
+# --- 7. Randomly sample 500 points ---
+set.seed(42)
+n_points <- npoints(lidar_clip)
+sample_idx <- sample(seq_len(n_points), size = min(500, n_points))
+lidar_sample <- lidar_clip[sample_idx, ]
+
+# Convert to sf
+xyz <- data.frame(
+  X = lidar_sample@data$X,
+  Y = lidar_sample@data$Y,
+  Z = lidar_sample@data$Z
+)
+
+points_sf <- st_as_sf(xyz, coords = c("X", "Y"), crs = st_crs(lidar_clip))
+
+# --- 8. Visualize in mapview ---
+mapview(anti_buffer, col.region = "blue", alpha = 0.3) +
+  mapview(points_sf, col.regions = "red", cex = 3)
