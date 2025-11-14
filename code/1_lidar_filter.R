@@ -47,6 +47,9 @@ anti_buffer<-st_difference(snoho_bbox,
 snoho_lascat_filter<-clip_roi(snoho_lascat,anti_buffer)
 
 
+##And write out filtered lidar data
 
+catalog_apply(snoho_lascat_filter, FUN = writeLAS,
+              file = here("Data", "filtered_las",tempfile(fileext = ".laz")))
 
 
