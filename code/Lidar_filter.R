@@ -44,16 +44,8 @@ anti_buffer<-st_difference(snoho_bbox,
   
 #Now, filter our points 
 
-##Here's the issue - clip_roi, which should fiter out the points, returns a null value because it doesn't recognize the overlap
 snoho_lascat_filter<-clip_roi(snoho_lascat,anti_buffer)
 
-
-snoho_raster<-raster::merge(catalog_apply(snoho_lascat_filter, 
-                                            FUN = rasterize_terrain(),
-                                            algorithm = kriging()))
-
-##They have the same crs, but R doesn't recognize the overlap because the Lidar points have been shifted to minimize noise in .laz file conversion
-##I don't know how to fix it, I would love to snap them together but I don't know how to do that with these types of data
 
 
 
