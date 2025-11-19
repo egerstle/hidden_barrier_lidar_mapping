@@ -1,56 +1,47 @@
 library(tidyverse)
 library(sf)
-library(ggspatial)
 library(here)
-library(terra)
-library(raster)
 library(lidR)
 library(osmdata)
 
 
 #Load in lidar data (downloaded manually from Washington State Lidar Portal; https://lidarportal.dnr.wa.gov/)
-snoho_path<-here("Data","kingco_sf_snoqualmie_river_2010","laz")
+snoho_path<-here("Data","las_test")
 
 snoho_lascat<-readLAScatalog(snoho_path)
 
+#Edit the crs to drop points in their proper location (listed crs is incorrect)
 st_crs(snoho_lascat)<-2927
 
-##Break catalog into 4km chunk with 1m buffers
-opt_chunk_size(snoho_lascat)<-4000
+#Break catalog into chunks with 1m buffers 
 opt_chunk_buffer(snoho_lascat)<-1
 
 
-#Fetch roads within case area roads
+#Create a new directory to store filtered las files
+dir.create(here("Data","lidar_filter"))
 
-##Set up bounding box (coordinates found manually on Washington state Lidar portal)
-snoho_bbox<-st_as_sfc(st_bbox(snoho_lascat),crs = 2927)
+#Write out a loop to process each file in the LASCatalog (instead of merging to 1 las object)
+for(i in 1:nrow(snoho_lascat@data)){
+##Select each file name and reset the laspath to read to that file
+  laspath<-snoho_lascat@data[["filename"]][[i]]
+##Read in each selected file
+  las<-readLAS(laspath)
+##Reset crs
+  st_crs(las)<-2927
+##Build a bbox for each file and convert back to latlon
+  bbox<-st_as_sfc(st_bbox(las),crs = 2927)
+  bbox_latlon<-st_transform(bbox,crs = 4326)|>st_bbox()
+##Select openstreetmaps roads from within each bbox
+  roads<-opq(bbox = bbox_latlon)|>add_osm_feature(key = "highway")|>osmdata_sf()
+##Build a 15m buffer around each road
+  roads_buffer<-roads$osm_lines|>st_transform(crs = crs(las))|>st_buffer(dist = 15)|>st_union()
+##Select for only those areas not within the 15m buffer
+  anti_buffer<-st_difference(bbox,roads_buffer)
+##Clip las file to only areas not within the 15m road buffer
+  las_filter<-clip_roi(las,anti_buffer)
+##Write new las file with filtered data
+  writeLAS(las_filter,file.path(here("Data","lidar_filter"),paste0("filter",i,".laz")))
+}
 
-snoho_bbox_latlon<-st_transform(snoho_bbox,4326)|>st_bbox()
-##Search for all roads (key = highway, level not specified)
-snoho_roads<-opq(bbox = snoho_bbox_latlon)|>
-  add_osm_feature(key = "highway")|>
-  osmdata_sf()
-
-
-##Buffer 15m around roads
-snoho_roads_buffer<-snoho_roads$osm_lines|>
-  st_transform(crs = crs(snoho_lascat))|>
-  st_buffer(dist = 15)|>
-  st_union()
-
-
-anti_buffer<-st_difference(snoho_bbox,
-                         snoho_roads_buffer)
-  
-#Now, filter our points 
-
-snoho_lascat_filter<-clip_roi(snoho_lascat,anti_buffer)
-
-
-##And write out filtered lidar data
-dir.create(path = here("Data","lidar_filter"))
-
-catalog_apply(snoho_lascat_filter, FUN = writeLAS,
-              file = here("Data", "lidar_filter",tempfile(fileext = ".laz")))
 
 
