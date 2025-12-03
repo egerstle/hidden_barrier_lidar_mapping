@@ -5,4 +5,5 @@ The *hidden_barrier_lidar_mapping* respository is built to contain sample proced
 ## Repository Structure
 
 - /code
-  - code/Lidar_filter: Procedures for loading in lidar data and filtering to remove roads from point cloud, along with creating DTMs for hydro enforcement procedures
+  - code/1_lidar_filter: Procedures for loading in lidar data and filtering to remove roads from point cloud, along with creating DTMs for hydro enforcement procedures
+  - code/2_stream_mapping: Procedures for converting lidar point clouds to DEMs and creating stream vectors
